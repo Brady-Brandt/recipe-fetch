@@ -84,7 +84,11 @@ func GetInstruction(instrMap map[string]any) (string, error) {
 		instr += step.(string) + " "
 	}
 	if step, hasKey := instrMap["text"]; hasKey {
-		instr += step.(string)
+		// on some websites these 2 fields are the same
+		// only want to capture both when they are different
+		if instr != step.(string) + " "{
+			instr += step.(string)
+		}
 	}
 
 	if len(instr) != 0 {
