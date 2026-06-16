@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -98,6 +97,91 @@ func GetInstruction(instrMap map[string]any) (string, error) {
 	}
 }
 
+func ConstructMD(recipeName string, ingredients []any, instructions []any) error {
+	fileName := recipeName + ".md"
+	f, err := os.Create(fileName)
+
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+	f.WriteString("# " + recipeName + "\n\n")
+
+	f.WriteString("## Ingredients\n")
+
+	for _, ingredient := range ingredients {
+		ingredient := ingredient.(string)
+		if ingredient == strings.ToUpper(ingredient) {
+			f.WriteString("\n### " + ingredient + "\n\n")
+		} else{
+			f.WriteString("- " + ingredient + "\n")
+		}
+	}
+
+	f.WriteString("\n## Instructions\n")
+
+	for step_cnt, step := range instructions {
+		instr, err := GetInstruction(step.(map[string]any))
+		if err != nil {
+			return err
+		}
+		f.WriteString("### Step " + strconv.Itoa(step_cnt + 1) + "\n")
+		f.WriteString(instr + "\n")
+	}
+	fmt.Println("Sucessfully Created " + fileName)
+	return nil
+}
+
+func ConstructHtml(recipeName string, ingredients []any, instructions []any) error {
+	fileName := recipeName + ".html"
+	f, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+	fmt.Fprintf(f,
+`<!DOCTYPE html>
+<html>
+<head>
+	<title>%s</title>
+</head>
+<body>
+<h1>%s</h1>`, recipeName, recipeName)
+
+
+	f.WriteString("\n<h2>Ingredients</h2>\n")
+	f.WriteString("<ul>\n")
+	for _, ingredient := range ingredients {
+		ingredient := ingredient.(string)
+		if ingredient == strings.ToUpper(ingredient) {
+			fmt.Fprintf(f, "<h3> %s </h3>\n", ingredient)
+		} else{
+			fmt.Fprintf(f, " <li>%s</li>\n", ingredient)
+		}
+	}
+
+	f.WriteString("</ul>\n")
+
+	f.WriteString("<h2>Instructions</h2>\n")
+	f.WriteString("<ol>\n")
+
+	for _, step := range instructions {
+		instr, err := GetInstruction(step.(map[string]any))
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(f, "<li><p>%s</p></li>\n", instr)
+	}
+
+	f.WriteString("</lo>\n")
+	f.WriteString("</body>\n")
+	f.WriteString("</html>\n")
+	fmt.Println("Sucessfully Created " + fileName)
+	return nil
+}
+
 func PrintUsage(){
 	fmt.Fprintln(os.Stderr, "Usage: ")
 	flag.PrintDefaults()	
@@ -107,9 +191,11 @@ func PrintUsage(){
 
 func main(){
 	var url, recipeName string 
+	var generateHtml bool = false
 
 	flag.StringVar(&url, "url", "", "URL of the website")
 	flag.StringVar(&recipeName, "o", "", "Name of the recipe")
+	flag.BoolVar(&generateHtml, "html", false, "Generates HTML instead of markdown")
 
 	flag.Parse()
 
@@ -162,43 +248,25 @@ func main(){
 	}
 
 	if ingredients == nil {
-		log.Fatal("Failed to get ingredients")
+		fmt.Fprintln(os.Stderr, "Failed to get Ingredients")
+		os.Exit(1)
+
 	}
 
 	if instructions == nil {
-		log.Fatal("Failed to get instructions")
+		fmt.Fprintln(os.Stderr, "Failed to get Instructions")
+		os.Exit(1)
 	}
 
 
-	fileName := recipeName + ".md"
-	f, err := os.Create(fileName)
+	if generateHtml {
+		err = ConstructHtml(recipeName, ingredients, instructions)
+	} else{
+		err = ConstructMD(recipeName, ingredients, instructions)
+	}
+
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-
-	defer f.Close()
-	f.WriteString("# " + recipeName + "\n\n")
-
-	f.WriteString("## Ingredients\n")
-
-	for _, ingredient := range ingredients {
-		ingredient := ingredient.(string)
-		if ingredient == strings.ToUpper(ingredient) {
-			f.WriteString("\n### " + ingredient + "\n\n")
-		} else{
-			f.WriteString("- " + ingredient + "\n")
-		}
-	}
-
-	f.WriteString("\n## Instructions\n")
-
-	for step_cnt, step := range instructions {
-		instr, err := GetInstruction(step.(map[string]any))
-		if err != nil {
-			log.Fatal(err)
-		}
-		f.WriteString("### Step " + strconv.Itoa(step_cnt + 1) + "\n")
-		f.WriteString(instr + "\n")
-	}
-	fmt.Println("Sucessfully Created " + fileName)
 }
