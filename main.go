@@ -106,6 +106,16 @@ func GetRecipeJson(url string) (map[string]any, error) {
 
 	var jsonEnd = jsonStart + strings.Index(html[jsonStart:], "</script>")
 
+	for {
+		c := html[jsonEnd];
+		if c == '}' {
+			jsonEnd += 1
+			break
+		}
+		jsonEnd -= 1
+		c = html[jsonEnd]
+	}
+
 	err = json.Unmarshal([]byte(html[jsonStart:jsonEnd]), &recipeJson)
 
 	if err != nil {
@@ -299,7 +309,7 @@ func main(){
 	if graph, hasKey := jsonRecipe["@graph"]; hasKey {
 		for _, item := range graph.([]any) {
 			field := item.(map[string]any)
-			recipe.GetIngredients(field)	
+			recipe.GetIngredients(field)
 			recipe.GetInstructions(field)
 			recipe.GetCookTime(field)
 			recipe.GetPrepTime(field)
