@@ -12,6 +12,61 @@ import (
 	"strings"
 )
 
+type Recipe struct {
+	Ingredients  []any
+	Instructions []any
+	CookTime     string
+	PrepTime     string
+	TotalTime    string
+}
+
+
+func (recipe *Recipe) GetIngredients(jsonField map[string]any){
+	_, hasIngredients:= jsonField["recipeIngredient"]
+	if hasIngredients {
+		recipe.Ingredients = jsonField["recipeIngredient"].([]any)
+	}
+}
+
+func (recipe *Recipe) GetInstructions(jsonField map[string]any){
+	_, hasInstructions:= jsonField["recipeInstructions"]
+	if hasInstructions {
+		recipe.Instructions = jsonField["recipeInstructions"].([]any)
+	}
+}
+
+func (recipe *Recipe) GetCookTime(jsonField map[string]any){
+	_, hasCookTime:= jsonField["cookTime"]
+	if hasCookTime {
+		recipe.CookTime = FormatTime(jsonField["cookTime"].(string))
+	}
+}
+
+func (recipe *Recipe) GetPrepTime(jsonField map[string]any){
+	_, hasPrepTime:= jsonField["prepTime"]
+	if hasPrepTime {
+		recipe.PrepTime = FormatTime(jsonField["prepTime"].(string))
+	}
+}
+
+func (recipe *Recipe) GetTotalTime(jsonField map[string]any){
+	_, hasTotalTime:= jsonField["totalTime"]
+	if hasTotalTime {
+		recipe.TotalTime = FormatTime(jsonField["totalTime"].(string))
+	}
+}
+
+func FormatTime(time string) string {
+	time = strings.TrimPrefix(time, "PT")
+	time = strings.TrimPrefix(time, "0H")
+	if strings.HasPrefix(time, "1H") {
+		time = strings.Replace(time, "H", " hour ", 1)
+	} else{
+		time = strings.Replace(time, "H", " hours ", 1)
+	}
+	time = strings.Replace(time, "M", " minutes ", 1)
+	return time
+}
 
 func GetRecipeJson(url string) (map[string]any, error) {	
 	var recipeJson map[string]any
@@ -60,23 +115,6 @@ func GetRecipeJson(url string) (map[string]any, error) {
 	return recipeJson, err
 }
 
-
-func GetIngredients(jsonField map[string]any, ingredients *[]any) {
-	_, hasIngredients:= jsonField["recipeIngredient"]
-	if hasIngredients {
-		*ingredients = jsonField["recipeIngredient"].([]any)
-	}
-}
-
-
-func GetInstructions(jsonField map[string]any, instructions*[]any) {
-	_, hasInstructions:= jsonField["recipeInstructions"]
-	if hasInstructions {
-		*instructions = jsonField["recipeInstructions"].([]any)
-	}
-}
-
-
 func GetInstruction(instrMap map[string]any) (string, error) {
 	var instr string = ""
 	if step, hasKey := instrMap["name"]; hasKey {
@@ -97,7 +135,7 @@ func GetInstruction(instrMap map[string]any) (string, error) {
 	}
 }
 
-func ConstructMD(recipeName string, ingredients []any, instructions []any) error {
+func ConstructMD(recipeName string, recipe Recipe) error {
 	fileName := recipeName + ".md"
 	f, err := os.Create(fileName)
 
@@ -108,9 +146,21 @@ func ConstructMD(recipeName string, ingredients []any, instructions []any) error
 	defer f.Close()
 	f.WriteString("# " + recipeName + "\n\n")
 
+	if(len(recipe.PrepTime) != 0){
+		f.WriteString("### Prep Time: " + recipe.PrepTime + "\n")
+	}
+
+	if(len(recipe.CookTime) != 0){
+		f.WriteString("### Cook Time: " + recipe.CookTime + "\n")
+	}
+
+	if(len(recipe.TotalTime) != 0){
+		f.WriteString("### Total Time: " + recipe.TotalTime + "\n")
+	}
+
 	f.WriteString("## Ingredients\n")
 
-	for _, ingredient := range ingredients {
+	for _, ingredient := range recipe.Ingredients {
 		ingredient := ingredient.(string)
 		if ingredient == strings.ToUpper(ingredient) {
 			f.WriteString("\n### " + ingredient + "\n\n")
@@ -121,7 +171,7 @@ func ConstructMD(recipeName string, ingredients []any, instructions []any) error
 
 	f.WriteString("\n## Instructions\n")
 
-	for step_cnt, step := range instructions {
+	for step_cnt, step := range recipe.Instructions {
 		instr, err := GetInstruction(step.(map[string]any))
 		if err != nil {
 			return err
@@ -133,7 +183,7 @@ func ConstructMD(recipeName string, ingredients []any, instructions []any) error
 	return nil
 }
 
-func ConstructHtml(recipeName string, ingredients []any, instructions []any) error {
+func ConstructHtml(recipeName string, recipe Recipe) error {
 	fileName := recipeName + ".html"
 	f, err := os.Create(fileName)
 	if err != nil {
@@ -150,10 +200,22 @@ func ConstructHtml(recipeName string, ingredients []any, instructions []any) err
 <body>
 <h1>%s</h1>`, recipeName, recipeName)
 
+	if(len(recipe.PrepTime) != 0){
+		fmt.Fprintf(f, "<h3>Prep Time: %s</h3>\n",recipe.PrepTime )
+	}
+
+	if(len(recipe.CookTime) != 0){
+		fmt.Fprintf(f, "<h3>Cook Time: %s</h3>\n",recipe.CookTime )
+	}
+
+	if(len(recipe.TotalTime) != 0){
+		fmt.Fprintf(f, "<h3>Total Time: %s</h3>\n",recipe.TotalTime )
+	}
+
 
 	f.WriteString("\n<h2>Ingredients</h2>\n")
 	f.WriteString("<ul>\n")
-	for _, ingredient := range ingredients {
+	for _, ingredient := range recipe.Ingredients {
 		ingredient := ingredient.(string)
 		if ingredient == strings.ToUpper(ingredient) {
 			fmt.Fprintf(f, "<h3> %s </h3>\n", ingredient)
@@ -167,7 +229,7 @@ func ConstructHtml(recipeName string, ingredients []any, instructions []any) err
 	f.WriteString("<h2>Instructions</h2>\n")
 	f.WriteString("<ol>\n")
 
-	for _, step := range instructions {
+	for _, step := range recipe.Instructions {
 		instr, err := GetInstruction(step.(map[string]any))
 		if err != nil {
 			return err
@@ -232,37 +294,40 @@ func main(){
 		os.Exit(1)
 	}
 	
-
-	var ingredients  []any = nil
-	var instructions []any = nil
+	recipe := Recipe{}
 
 	if graph, hasKey := jsonRecipe["@graph"]; hasKey {
 		for _, item := range graph.([]any) {
 			field := item.(map[string]any)
-			GetIngredients(field, &ingredients)	
-			GetInstructions(field, &instructions)
+			recipe.GetIngredients(field)	
+			recipe.GetInstructions(field)
+			recipe.GetCookTime(field)
+			recipe.GetPrepTime(field)
+			recipe.GetTotalTime(field)
 		}
 	} else{
-		GetIngredients(jsonRecipe, &ingredients)
-		GetInstructions(jsonRecipe, &instructions)
+		recipe.GetIngredients(jsonRecipe)
+		recipe.GetInstructions(jsonRecipe)
+		recipe.GetCookTime(jsonRecipe)
+		recipe.GetPrepTime(jsonRecipe)
+		recipe.GetTotalTime(jsonRecipe)
 	}
 
-	if ingredients == nil {
+	if recipe.Ingredients == nil {
 		fmt.Fprintln(os.Stderr, "Failed to get Ingredients")
 		os.Exit(1)
 
 	}
 
-	if instructions == nil {
+	if recipe.Instructions == nil {
 		fmt.Fprintln(os.Stderr, "Failed to get Instructions")
 		os.Exit(1)
 	}
 
-
 	if generateHtml {
-		err = ConstructHtml(recipeName, ingredients, instructions)
+		err = ConstructHtml(recipeName, recipe)
 	} else{
-		err = ConstructMD(recipeName, ingredients, instructions)
+		err = ConstructMD(recipeName, recipe)
 	}
 
 	if err != nil {
