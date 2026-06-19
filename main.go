@@ -18,6 +18,7 @@ type Recipe struct {
 	CookTime     string
 	PrepTime     string
 	TotalTime    string
+	Servings     string
 }
 
 
@@ -53,6 +54,24 @@ func (recipe *Recipe) GetTotalTime(jsonField map[string]any){
 	_, hasTotalTime:= jsonField["totalTime"]
 	if hasTotalTime {
 		recipe.TotalTime = FormatTime(jsonField["totalTime"].(string))
+	}
+}
+
+func (recipe *Recipe) GetServings(jsonField map[string]any){
+	_, hasServings := jsonField["recipeYield"]
+	if hasServings {
+		servings := jsonField["recipeYield"]
+		switch typeServings := servings.(type) {
+			case string:
+				recipe.Servings = typeServings;
+			case []any:
+				for _, size := range typeServings {
+					if stringServing, ok := size.(string); ok {
+						recipe.Servings += stringServing
+						break
+					}
+				}
+		}
 	}
 }
 
@@ -170,6 +189,10 @@ func ConstructMD(url string, recipeName string, recipe Recipe) error {
 		f.WriteString("### Total Time: " + recipe.TotalTime + "\n")
 	}
 
+	if(len(recipe.Servings) != 0){
+		f.WriteString("### Servings: " + recipe.Servings + "\n")
+	}
+
 	f.WriteString("## Ingredients\n")
 
 	for _, ingredient := range recipe.Ingredients {
@@ -210,9 +233,9 @@ func ConstructHtml(url string, recipeName string, recipe Recipe) error {
 	<title>%s</title>
 </head>
 <body>
-<h1>%s</h1>\n`, recipeName, recipeName)
+<h1>%s</h1>`, recipeName, recipeName)
 
-	fmt.Fprintf(f, "<h4><a href = \"%s\">Original Recipe</a></h4>\n", url)
+	fmt.Fprintf(f, "\n<h4><a href = \"%s\">Original Recipe</a></h4>\n", url)
 
 	if(len(recipe.PrepTime) != 0){
 		fmt.Fprintf(f, "<h3>Prep Time: %s</h3>\n",recipe.PrepTime )
@@ -226,6 +249,9 @@ func ConstructHtml(url string, recipeName string, recipe Recipe) error {
 		fmt.Fprintf(f, "<h3>Total Time: %s</h3>\n",recipe.TotalTime )
 	}
 
+	if(len(recipe.Servings) != 0){
+		fmt.Fprintf(f, "<h3>Servings: %s</h3>\n",recipe.Servings)
+	}
 
 	f.WriteString("\n<h2>Ingredients</h2>\n")
 	f.WriteString("<ul>\n")
@@ -318,6 +344,7 @@ func main(){
 			recipe.GetCookTime(field)
 			recipe.GetPrepTime(field)
 			recipe.GetTotalTime(field)
+			recipe.GetServings(field)
 		}
 	} else{
 		recipe.GetIngredients(jsonRecipe)
@@ -325,6 +352,7 @@ func main(){
 		recipe.GetCookTime(jsonRecipe)
 		recipe.GetPrepTime(jsonRecipe)
 		recipe.GetTotalTime(jsonRecipe)
+		recipe.GetServings(jsonRecipe)
 	}
 
 	if recipe.Ingredients == nil {
