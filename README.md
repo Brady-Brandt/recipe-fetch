@@ -4,7 +4,7 @@ A simple CLI tool that extracts recipes from a webpage and converts them into a 
 ## Features
 
 - Extract recipe data from supported recipe websites*
-- Generate clean Markdown output
+- Generate clean Markdown or HTML output
 - Save recipes for offline use
 - Simple command-line interface
 
@@ -26,10 +26,14 @@ This will try to pull the recipe from the url and if successful it will create a
 ```bash
 go run . -url https://example.com/recipe -o recipe_name
 ```
+If you want HTML instead of markdown, use the html flag
+```bash
+go run . -url -html https://example.com/recipe -o recipe_name
+```
 
 ## Usage
 ```bash
-recipe-fetch -url <recipe-url> [-o <recipe-name>]
+recipe-fetch -url [-html] <recipe-url> [-o <recipe-name>]
 ```
 If no recipe name is inputted, the last part of the url will be used instead.
 The following will create a file `homemade-brownies.md`
@@ -39,6 +43,12 @@ recipe-fetch -url "https://example.com/homemade-brownies
 ## Example Output
 ```markdown
 # homemade-brownies
+
+### [Orignal Recipe](https://example.com/homemade-brownies)
+### Prep Time: 10 minutes 
+### Cook Time: 25 minutes 
+### Total Time: 35 minutes 
+### Servings: 20
 
 ## Ingredients
 
