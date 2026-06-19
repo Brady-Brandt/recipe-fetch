@@ -145,7 +145,7 @@ func GetInstruction(instrMap map[string]any) (string, error) {
 	}
 }
 
-func ConstructMD(recipeName string, recipe Recipe) error {
+func ConstructMD(url string, recipeName string, recipe Recipe) error {
 	fileName := recipeName + ".md"
 	f, err := os.Create(fileName)
 
@@ -155,6 +155,8 @@ func ConstructMD(recipeName string, recipe Recipe) error {
 
 	defer f.Close()
 	f.WriteString("# " + recipeName + "\n\n")
+
+	fmt.Fprintf(f, "### [Orignal Recipe](%s)\n", url)
 
 	if(len(recipe.PrepTime) != 0){
 		f.WriteString("### Prep Time: " + recipe.PrepTime + "\n")
@@ -193,7 +195,7 @@ func ConstructMD(recipeName string, recipe Recipe) error {
 	return nil
 }
 
-func ConstructHtml(recipeName string, recipe Recipe) error {
+func ConstructHtml(url string, recipeName string, recipe Recipe) error {
 	fileName := recipeName + ".html"
 	f, err := os.Create(fileName)
 	if err != nil {
@@ -208,7 +210,9 @@ func ConstructHtml(recipeName string, recipe Recipe) error {
 	<title>%s</title>
 </head>
 <body>
-<h1>%s</h1>`, recipeName, recipeName)
+<h1>%s</h1>\n`, recipeName, recipeName)
+
+	fmt.Fprintf(f, "<h4><a href = \"%s\">Original Recipe</a></h4>\n", url)
 
 	if(len(recipe.PrepTime) != 0){
 		fmt.Fprintf(f, "<h3>Prep Time: %s</h3>\n",recipe.PrepTime )
@@ -335,9 +339,9 @@ func main(){
 	}
 
 	if generateHtml {
-		err = ConstructHtml(recipeName, recipe)
+		err = ConstructHtml(url, recipeName, recipe)
 	} else{
-		err = ConstructMD(recipeName, recipe)
+		err = ConstructMD(url, recipeName, recipe)
 	}
 
 	if err != nil {
