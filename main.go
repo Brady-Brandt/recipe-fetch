@@ -134,6 +134,7 @@ func GetRecipeJson(url string) (map[string]any, error) {
 		jsonEnd -= 1
 		c = html[jsonEnd]
 	}
+	//fmt.Println(html[jsonStart:jsonEnd])
 
 	err = json.Unmarshal([]byte(html[jsonStart:jsonEnd]), &recipeJson)
 
@@ -144,7 +145,7 @@ func GetRecipeJson(url string) (map[string]any, error) {
 	return recipeJson, err
 }
 
-func GetInstruction(instrMap map[string]any) (string, error) {
+func GetInstruction(instrMap map[string]any) (string,[]any, error) {
 	var instr string = ""
 	if step, hasKey := instrMap["name"]; hasKey {
 		instr += step.(string) + " "
@@ -157,10 +158,17 @@ func GetInstruction(instrMap map[string]any) (string, error) {
 		}
 	}
 
+	var substeps []any = nil
+	if _, hasKey := instrMap["itemListElement"]; hasKey {
+		// some websites store instructions inside instructions
+		// the name or text field will say like frosting and then
+		// the instructions to make the frosting will be stored in this sub array
+		substeps = instrMap["itemListElement"].([]any)
+	}
 	if len(instr) != 0 {
-		return instr, nil
+		return instr, substeps,nil
 	} else{
-		return "", errors.New("Could not find directions")
+		return "", nil, errors.New("Could not find directions")
 	}
 }
 
@@ -207,12 +215,24 @@ func ConstructMD(url string, recipeName string, recipe Recipe) error {
 	f.WriteString("\n## Instructions\n")
 
 	for step_cnt, step := range recipe.Instructions {
-		instr, err := GetInstruction(step.(map[string]any))
+		instr, subSteps, err := GetInstruction(step.(map[string]any))
 		if err != nil {
 			return err
 		}
-		f.WriteString("### Step " + strconv.Itoa(step_cnt + 1) + "\n")
-		f.WriteString(instr + "\n")
+		if subSteps == nil{
+			f.WriteString("### Step " + strconv.Itoa(step_cnt + 1) + "\n")
+			f.WriteString(instr + "\n")
+		} else{
+			f.WriteString("### " + instr + "\n")
+			for i, subStep := range subSteps {
+				instr, _, err := GetInstruction(subStep.(map[string]any))
+				if err != nil {
+					return err
+				}
+				f.WriteString("### Step " + strconv.Itoa(i + 1) + "\n")
+				f.WriteString(instr + "\n")
+			}
+		}
 	}
 	fmt.Println("Sucessfully Created " + fileName)
 	return nil
@@ -270,14 +290,27 @@ func ConstructHtml(url string, recipeName string, recipe Recipe) error {
 	f.WriteString("<ol>\n")
 
 	for _, step := range recipe.Instructions {
-		instr, err := GetInstruction(step.(map[string]any))
+		instr,subSteps, err := GetInstruction(step.(map[string]any))
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(f, "<li><p>%s</p></li>\n", instr)
+		if subSteps == nil{
+			fmt.Fprintf(f, "<li><p>%s</p></li>\n", instr)
+		} else{
+			f.WriteString("<h3>" + instr + "</h3>\n")
+			f.WriteString("<ol>\n")
+			for _, subStep := range subSteps {
+				instr, _, err := GetInstruction(subStep.(map[string]any))
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(f, "<li><p>%s</p></li>\n", instr)
+			}
+			f.WriteString("</ol>\n")
+		}
 	}
 
-	f.WriteString("</lo>\n")
+	f.WriteString("</ol>\n")
 	f.WriteString("</body>\n")
 	f.WriteString("</html>\n")
 	fmt.Println("Sucessfully Created " + fileName)
