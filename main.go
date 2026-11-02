@@ -87,15 +87,13 @@ func FormatTime(time string) string {
 	return time
 }
 
-func GetRecipeJson(url string) (map[string]any, error) {	
-	var recipeJson map[string]any
-
+func GetHtml(url string) (string, error){
 	client := &http.Client{}	
 	req, err := http.NewRequest("GET", url, nil)
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to create http request")
-		return recipeJson, err
+		return "", err
 	}
 
 	// if this isn't set we may be denied access to the website
@@ -104,14 +102,17 @@ func GetRecipeJson(url string) (map[string]any, error) {
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to send http request")
-		return recipeJson, err
+		return "", err
 	}
 
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	html := string(body)
+	return string(body), nil
+}
 
+func GetRecipeJson(html string) (map[string]any, error) {
+	var recipeJson map[string]any
 	var jsonStart = strings.Index(html, "application/ld+json")
 
 	if jsonStart == -1 {
@@ -136,7 +137,7 @@ func GetRecipeJson(url string) (map[string]any, error) {
 	}
 	//fmt.Println(html[jsonStart:jsonEnd])
 
-	err = json.Unmarshal([]byte(html[jsonStart:jsonEnd]), &recipeJson)
+	err := json.Unmarshal([]byte(html[jsonStart:jsonEnd]), &recipeJson)
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Failed to parse json")
@@ -183,7 +184,9 @@ func ConstructMD(url string, recipeName string, recipe Recipe) error {
 	defer f.Close()
 	f.WriteString("# " + recipeName + "\n\n")
 
-	fmt.Fprintf(f, "### [Orignal Recipe](%s)\n", url)
+	if len(url) != 0 {
+		fmt.Fprintf(f, "### [Orignal Recipe](%s)\n", url)
+	}
 
 	if(len(recipe.PrepTime) != 0){
 		f.WriteString("### Prep Time: " + recipe.PrepTime + "\n")
@@ -255,7 +258,9 @@ func ConstructHtml(url string, recipeName string, recipe Recipe) error {
 <body>
 <h1>%s</h1>`, recipeName, recipeName)
 
-	fmt.Fprintf(f, "\n<h4><a href = \"%s\">Original Recipe</a></h4>\n", url)
+	if len(url) != 0{
+		fmt.Fprintf(f, "\n<h4><a href = \"%s\">Original Recipe</a></h4>\n", url)
+	}
 
 	if(len(recipe.PrepTime) != 0){
 		fmt.Fprintf(f, "<h3>Prep Time: %s</h3>\n",recipe.PrepTime )
@@ -325,11 +330,12 @@ func PrintUsage(){
 
 
 func main(){
-	var url, recipeName string 
+	var url, recipeName, inputFile string
 	var generateHtml bool = false
 
 	flag.StringVar(&url, "url", "", "URL of the website")
 	flag.StringVar(&recipeName, "o", "", "Name of the recipe")
+	flag.StringVar(&inputFile, "file", "", "File containing a website's html")
 	flag.BoolVar(&generateHtml, "html", false, "Generates HTML instead of markdown")
 
 	flag.Parse()
@@ -338,10 +344,17 @@ func main(){
 		PrintUsage()
 	}
 
+	usesUrl := false
 
-	if len(url) == 0 {
-		fmt.Fprintln(os.Stderr, "Error: Missing URL")
-		os.Exit(1)
+	if len(inputFile) != 0 {
+		fmt.Printf("Getting recipe from %s\n", inputFile)
+	} else{
+		if len(url) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: Missing URL or input file")
+			os.Exit(1)
+		}
+		usesUrl = true
+		fmt.Printf("Getting recipe from %s\n", url)
 	}
 
 	if flag.NArg() != 0 {
@@ -350,23 +363,60 @@ func main(){
 	}
 
 
-	// if no recipeName is inputted use the last part of the url as the recipeName
 	if len(recipeName) == 0 {
-		splitUrl := strings.Split(url, "/")
-		for i := len(splitUrl) - 1; i > 0; i-- {
-			if len(splitUrl[i]) != 0 {
-				recipeName = splitUrl[i]
-				break
+		// if no recipeName is inputted
+		// use the last part of the url or the input file as the recipeName
+		if usesUrl {
+			splitString := strings.Split(url, "/")
+			for i := len(splitString) - 1; i > 0; i-- {
+				if len(splitString[i]) != 0 {
+					recipeName = splitString[i]
+					break
+				}
+			}
+		} else{
+			splitString := strings.Split(inputFile, ".")
+			for i := range splitString {
+				if len(splitString[i]) != 0 {
+					recipeName = splitString[i]
+					break
+				}
 			}
 		}
 	}
 
-	jsonRecipe, err := GetRecipeJson(url)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	var jsonRecipe map[string]any
+
+	if usesUrl {
+		html, err := GetHtml(url)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		jsonRecipe, err = GetRecipeJson(html)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			msg := "If this website has advanced bot protection, try to input a file instead"
+			fmt.Fprintln(os.Stderr, msg)
+			os.Exit(1)
+		}
+	} else{
+		html, err := os.ReadFile(inputFile)
+
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+
+		jsonRecipe, err = GetRecipeJson(string(html))
+
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	}
-	
+
 	recipe := Recipe{}
 
 	if graph, hasKey := jsonRecipe["@graph"]; hasKey {
@@ -399,6 +449,7 @@ func main(){
 		os.Exit(1)
 	}
 
+	var err any
 	if generateHtml {
 		err = ConstructHtml(url, recipeName, recipe)
 	} else{
